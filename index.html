@@ -1,61 +1,112 @@
 <html>
-  <head>
-    <link rel="stylesheet" href="cssReset.css">
-    <script src="phaser.min.js"></script>
-    <style>
+	<head>
+		<link rel="stylesheet" href="cssReset.css">
+		<script src="matter.min.js"></script>
+		<style>
+		</style>
+	</head>
+	<body>
+		<script>
+			// module aliases
+			var Engine = Matter.Engine,
+				Render = Matter.Render,
+				World = Matter.World,
+				Bodies = Matter.Bodies,
+				Body = Matter.Body;
 
-    </style>
-  </head>
-  <body>
+			// create an engine
+			var engine = Engine.create({
+				enableSleeping: false
+			});
 
-    <script>
-      var game = new Phaser.Game(1280, 720, Phaser.AUTO, '', { preload: preload, create: create, update: update });
-
-      function preload() {
-        game.load.image('IDLogo', './insanedolllogo.png');
-      }
-
-      function create() {
-        logo = game.add.sprite(0, 0, 'IDLogo');
-        logo.age = 120;
-        leftKey = game.input.keyboard.addKey(Phaser.Keyboard.LEFT);
-        rightKey = game.input.keyboard.addKey(Phaser.Keyboard.RIGHT);
-        upKey = game.input.keyboard.addKey(Phaser.Keyboard.UP);
-        downKey = game.input.keyboard.addKey(Phaser.Keyboard.DOWN);
-      }
-
-      var init = false;
+			// create a renderer
+			var render = Render.create({
+				element: document.body,
+				engine: engine,
+				options: {
+					width: 1280,
+					height: 720
+				}
+			});
+			render.options.hasBounds = true;
 
 
-      function runSim() {
-        if(!init) {
-			
-          init = true;
-        }
-        iterate();
-      }
-	  
-	  function iterate() {
-	  
-	  }
+			var escalatorSize = 60;
+			var escalator = [];
+			var people = [];
 
-      var logoVisible = true;
+			for(let i = 0; i < escalatorSize; ++i) {
+				escalator[i] = Bodies.rectangle(1000 - (i+1) * 40, 200 + (i+1) * 36, 40, 100, {isStatic: true});
+				escalator[i].slop = 0;
+				//escalator[i].friction = 1;
+				escalator[i].person = (Math.random() > 0.1 ? createPerson((i+1)) : undefined);
+				if(escalator[i].person) {
+					people[people.length] = escalator[i].person;
+				}
+			}
 
-      function update() {
-        if(logoVisible) {
-          if(logo.age > -1) {
-            logo.age--;
-            if(logo.age < 31) {
-              logo.alpha = logo.age / 30;
-            }
-          } else if(logo.age == -1) {
-            logo = null;
-            logoVisible = false;
-          }
-        } else {
-          runSim();
-        }
-      }
-    </script>
-  </body>
+			function createPerson(num) {
+				let res = Bodies.rectangle(1000 - num * 40, 100 + num * 36, 36, 60);
+				res.height = 100;
+				res.slop = 1;
+				res.density = 0.0001;
+				res.restitution = 0;//1;
+				//res.friction = 1;
+				World.add(engine.world, res);
+				return res;
+			}
+
+			// add all of the bodies to the world
+			//World.add(engine.world, people);
+			World.add(engine.world, escalator);
+
+			var chinUpBar = Bodies.circle(1030, 60, 50, {isStatic: true});
+			World.add(engine.world, chinUpBar);
+
+			var mouseX = -1000;
+			var mouseY = -1000;
+			document.addEventListener("mousemove", function(e) {
+				mouseX = e.clientX;
+				mouseY = e.clientY;
+			});
+
+			var escalatorSpeed = 0.25;
+			function draw() {
+				Engine.update(engine, 1000/60, 1);
+				Render.world(render);
+				for(let i = 0; i < escalatorSize; ++i) {
+					if(escalator[i].position.x > 1040) {
+						Body.setPosition(escalator[i], {
+							x: 1040 - escalatorSize * 40,
+							y: 164 + escalatorSize * 36
+						});
+						escalator[i].person = (Math.random() > 0.1 ? createPerson(escalatorSize-1) : undefined);
+						if(escalator[i].person) {
+							people[people.length] = escalator[i].person;
+							escalator[i].person.slop = 1;
+						}
+					} else {
+						Body.translate(escalator[i], {
+							x: escalatorSpeed,
+							y: -escalatorSpeed * 18 / 20
+						});
+						Body.setVelocity(escalator[i], {
+							x: escalatorSpeed,
+							y: -escalatorSpeed * 18 / 20
+						});
+					}
+				}
+				for(var i = 0, l = people.length; i < l; ++i) {
+					if(people[i].position.x > 1300 || (people[i].position.y > 900 && people[i].position.x > 1020)) {
+						Matter.Composite.remove(engine.world, people[i]);
+						people.splice(i, 1);
+						--i;
+						--l;
+					}
+				}
+				window.requestAnimationFrame(draw);
+			}
+			window.requestAnimationFrame(draw);
+		</script>
+	</body>
 </html>
