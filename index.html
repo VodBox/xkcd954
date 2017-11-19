@@ -32,7 +32,7 @@
 			var people = [];
 
 			var poses = [];
-			for(var i = 0; i < 3; ++i) {
+			for(var i = 0; i < 6; ++i) {
 				poses[i] = [];
 				poses[i][0] = PIXI.Texture.fromImage("People/0" + (i+1) + "/Standing.png");
 				poses[i][1] = PIXI.Texture.fromImage("People/0" + (i+1) + "/Worried.png");
@@ -56,7 +56,7 @@
 				res.slop = 4;
 				res.density = 0.001;
 				res.restitution = 0.1;//1;
-				let char = Math.floor(Math.random() * 3);
+				let char = Math.floor(Math.random() * 6);
 				res.graphic = new PIXI.Sprite(poses[char][0]);// + Math.floor(Math.random() * 10) + ".png");
 				res.char = char;
 				res.graphic.anchor.set(0.5);// + Math.floor(Math.random() * 10) + ".png");
