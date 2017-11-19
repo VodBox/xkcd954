@@ -2,14 +2,21 @@
 	<head>
 		<link rel="stylesheet" href="cssReset.css">
 		<script src="matter.min.js"></script>
+		<script src="pixi.min.js"></script>
 		<style>
 		</style>
 	</head>
 	<body>
 		<script>
+			var app = new PIXI.Application(1280, 720, {backgroundColor : 0xFFFFFF});
+			document.body.appendChild(app.view);
 			// module aliases
+
+			var pGraphicContainer = new PIXI.Container();
+			app.stage.addChild(pGraphicContainer);
+
 			var Engine = Matter.Engine,
-				Render = Matter.Render,
+				Render = Matter.RenderPixi,
 				World = Matter.World,
 				Bodies = Matter.Bodies,
 				Body = Matter.Body;
@@ -19,38 +26,43 @@
 				enableSleeping: false
 			});
 
-			// create a renderer
-			var render = Render.create({
-				element: document.body,
-				engine: engine,
-				options: {
-					width: 1280,
-					height: 720
-				}
-			});
-			render.options.hasBounds = true;
 
-
-			var escalatorSize = 60;
+			var escalatorSize = 35;
 			var escalator = [];
 			var people = [];
 
+			var poses = [];
+			for(var i = 0; i < 3; ++i) {
+				poses[i] = [];
+				poses[i][0] = PIXI.Texture.fromImage("People/0" + (i+1) + "/Standing.png");
+				poses[i][1] = PIXI.Texture.fromImage("People/0" + (i+1) + "/Worried.png");
+				poses[i][2] = PIXI.Texture.fromImage("People/0" + (i+1) + "/FallBack.png");
+				poses[i][3] = PIXI.Texture.fromImage("People/0" + (i+1) + "/FallForward.png");
+			}
+
 			for(let i = 0; i < escalatorSize; ++i) {
-				escalator[i] = Bodies.rectangle(1000 - (i+1) * 40, 200 + (i+1) * 36, 40, 100, {isStatic: true});
+				escalator[i] = Bodies.rectangle(1100 - (i+1) * 40, 200 + (i+1) * 36, 40, 100, {isStatic: true});
 				escalator[i].slop = 0;
 				//escalator[i].friction = 1;
-				escalator[i].person = (Math.random() > 0.1 ? createPerson((i+1)) : undefined);
+				escalator[i].person = (Math.random() > 0.4 ? createPerson((i+1)) : undefined);
 				if(escalator[i].person) {
 					people[people.length] = escalator[i].person;
 				}
 			}
 
 			function createPerson(num) {
-				let res = Bodies.rectangle(1000 - num * 40, 100 + num * 36, 36, 60);
+				let res = Bodies.rectangle(1107 - num * 40, 100 + num * 36, 18, 60);
 				res.height = 100;
-				res.slop = 1;
-				res.density = 0.0001;
-				res.restitution = 0;//1;
+				res.slop = 4;
+				res.density = 0.001;
+				res.restitution = 0.1;//1;
+				let char = Math.floor(Math.random() * 3);
+				res.graphic = new PIXI.Sprite(poses[char][0]);// + Math.floor(Math.random() * 10) + ".png");
+				res.char = char;
+				res.graphic.anchor.set(0.5);// + Math.floor(Math.random() * 10) + ".png");
+				res.graphic.width = 36;
+				res.graphic.height = 60;
+				pGraphicContainer.addChild(res.graphic);
 				//res.friction = 1;
 				World.add(engine.world, res);
 				return res;
@@ -60,27 +72,126 @@
 			//World.add(engine.world, people);
 			World.add(engine.world, escalator);
 
-			var chinUpBar = Bodies.circle(1030, 60, 50, {isStatic: true});
-			World.add(engine.world, chinUpBar);
+			var score = 0;
+			var scoreBarY = Bodies.rectangle(640, 100, 1280, 2, {isStatic: true, isSensor: true});
+			var scoreBarX = Bodies.rectangle(360, 0, 2, 720, {isStatic: true, isSensor: true});
+			World.add(engine.world, [scoreBarX, scoreBarY]);
+
+			var escalatorGraphics = [0, 0, 0, 0, 0, 0, 0, 0];
+
+			var graphics = new PIXI.Graphics();
+			graphics.lineStyle(6, 0x000000, 1);
+			graphics.beginFill(0xFFFFFF);
+			graphics.drawRect(0, 0, 300, 900);
+			graphics.endFill();
+			graphics.ox = 1200;
+			graphics.oy = 100;
+			graphics.owidth = 300;
+			graphics.oheight = 900;
+			app.stage.addChild(graphics);
+			escalatorGraphics[0] = graphics;
+
+			for(var i = 3; i > -1; --i) {
+				let escalatorG = PIXI.Sprite.fromImage("escalator.png");
+				escalatorG.x = 690;
+				escalatorG.ox = 690;
+				escalatorG.y = 230+i*145;
+				escalatorG.oy = 230+i*145;
+				escalatorG.owidth = 548;
+				escalatorG.oheight = 409;
+				escalatorGraphics[i+1] = escalatorG;
+				app.stage.addChild(escalatorG);
+			}
+
+			for(var i = 2; i > -1; --i) {
+				let escalatorGraphic = PIXI.Sprite.fromImage("escalator.png");//Bodies.rectangle(840-320*i, 305+290*i, 1280, 1280, {isStatic: true, isSensor: true});
+				//escalatorGraphic.render.sprite.texture = "escalator.png";
+				//escalatorGraphic.render.sprite.xScale = 1;
+				//escalatorGraphic.render.sprite.yScale = 1;
+				escalatorGraphic.x = 690-320*i;
+				escalatorGraphic.ox = 690-320*i;
+				escalatorGraphic.y = 85+290*i;
+				escalatorGraphic.oy = 85+290*i;
+				escalatorGraphic.owidth = 548;
+				escalatorGraphic.oheight = 409;
+				//escalatorGraphic.width = 100;
+				//escalatorGraphic.height = 100;
+				escalatorGraphics[i+5] = escalatorGraphic;
+				app.stage.addChild(escalatorGraphic);
+			}
+
+			var chinUpBar;
+			var chinUpBox;
+			// var chinUpBar = Bodies.circle(1050, 50, 100, {isStatic: true});
+			// World.add(engine.world, chinUpBar);
 
 			var mouseX = -1000;
 			var mouseY = -1000;
-			document.addEventListener("mousemove", function(e) {
+			var clickTime = 0;
+			document.addEventListener("mouseup", function(e) {
 				mouseX = e.clientX;
 				mouseY = e.clientY;
+				if(!chinUpBar) {
+					chinUpBar = Bodies.circle(1455, 40, 120, {isStatic: true});
+					chinUpBox = Bodies.rectangle(1175, 110, 80, 40, {isStatic: true});
+					World.add(engine.world, [chinUpBar, chinUpBox]);
+					app.renderer.backgroundColor = 0xAA3333;
+				} else {
+					Matter.Composite.remove(engine.world, chinUpBar);
+					Matter.Composite.remove(engine.world, chinUpBox);
+					chinUpBar = undefined;
+					app.renderer.backgroundColor = 0xFFFFFF;
+				}
 			});
 
-			var escalatorSpeed = 0.25;
+			var averageXs = [];
+			var averageLength = 40;
+			var averageDepth = 5;
+			for(var i = 0; i < averageDepth; ++i) {
+				averageXs[i] = [];
+				for(var x = 0; x < averageLength; ++x) {
+					averageXs[i][x] = [800, 0];
+				}
+			}
+
+			function smooth(x, y, depth) {
+				depth = (depth ? depth : 0);
+				let num = [0, 0];
+				averageXs[depth] = averageXs[depth].slice(1);
+				averageXs[depth][averageXs[depth].length] = [x, y];
+				for(var i = 0, l = averageXs[depth].length; i < l; ++i) {
+					num[0] += averageXs[depth][i][0] / l;
+					num[1] += averageXs[depth][i][1] / l;
+				}
+				if(depth < averageDepth - 1) {
+					return smooth(num[0], num[1], depth + 1);
+				} else {
+					return num;
+				}
+			}
+
+			function mod(n, m) {
+				return ((n % m) + m) % m;
+			}
+
+			var camScale = 480/1280;
+			var camOffsetX = 800;
+			var camOffsetY = 0;
+
+			var escalatorSpeed = 0.5;
 			function draw() {
 				Engine.update(engine, 1000/60, 1);
-				Render.world(render);
+				//Render.world(render);
 				for(let i = 0; i < escalatorSize; ++i) {
-					if(escalator[i].position.x > 1040) {
+					if(escalator[i].position.x > 1140) {
 						Body.setPosition(escalator[i], {
-							x: 1040 - escalatorSize * 40,
+							x: 1140 - escalatorSize * 40,
 							y: 164 + escalatorSize * 36
 						});
-						escalator[i].person = (Math.random() > 0.1 ? createPerson(escalatorSize-1) : undefined);
+						if(escalator[i].person && !chinUpBar && !escalator[i].fallen && escalator[i].person.position.x > escalator[i].position.x - 20) {
+							escalator[i].person.isStatic = true;
+						}
+						escalator[i].person = (Math.random() > 0.4 ? createPerson(escalatorSize-1) : undefined);
 						if(escalator[i].person) {
 							people[people.length] = escalator[i].person;
 							escalator[i].person.slop = 1;
@@ -96,13 +207,65 @@
 						});
 					}
 				}
+				for(var i = 0, l = escalatorGraphics.length; i < l; ++i) {
+					escalatorGraphics[i].x = (escalatorGraphics[i].ox - camOffsetX) / camScale;
+					escalatorGraphics[i].y = (escalatorGraphics[i].oy - camOffsetY) / camScale;
+					escalatorGraphics[i].width = escalatorGraphics[i].owidth / camScale;
+					escalatorGraphics[i].height = escalatorGraphics[i].oheight / camScale;
+				}
+				var minX = 300;
+				var minY = 0;
+				var averageX = 0;
 				for(var i = 0, l = people.length; i < l; ++i) {
-					if(people[i].position.x > 1300 || (people[i].position.y > 900 && people[i].position.x > 1020)) {
+					if(mod(people[i].angle, 2*Math.PI) > 0.2 && mod(people[i].angle, 2*Math.PI) < 2*Math.PI - 0.2) {
+						people[i].fallen = true;
+						people[i].graphic.texture = (mod(people[i].angle, 2*Math.PI) < Math.PI ? poses[people[i].char][3] : poses[people[i].char][2]);
+					} else {
+						people[i].graphic.texture = (people[i].fallen ? poses[people[i].char][1] : poses[people[i].char][0]);
+					}
+					people[i].graphic.x = (people[i].position.x - camOffsetX) / camScale;
+					people[i].graphic.y = (people[i].position.y - camOffsetY) / camScale;
+					people[i].graphic.width = 36 / camScale;
+					people[i].graphic.height = 60 / camScale;
+					people[i].graphic.rotation = people[i].angle;
+					if(people[i].isStatic ) {
+						Body.translate(people[i],{
+							x: escalatorSpeed * 20 / 18,
+							y: 0
+						});
+					}
+					if(people[i].position.x > 1300 || people[i].position.y > 1900 || (people[i].position.y > 900 && people[i].position.x > 1020)) {
+						people[i].graphic.destroy();
 						Matter.Composite.remove(engine.world, people[i]);
 						people.splice(i, 1);
 						--i;
 						--l;
+					} else {
+						minY = Math.min(minY, people[i].position.y);
+						minX = Math.max(Math.min(minX, people[i].position.x), 1040 - escalatorSize * 40);
+						averageX += people[i].position.x / l;
+						var pos = -(people[i].position.x - 1000) / 40;
+						if((200 + pos * 36) - people[i].position.y > score) {
+							score = (200 + (pos) * 36) - people[i].position.y;
+							Body.setPosition(scoreBarY, {
+								x: 640,
+								y: people[i].position.y
+							});
+							Body.setPosition(scoreBarX, {
+								x: people[i].position.x,
+								y: 360
+							});
+						}
 					}
+				}
+				if(chinUpBar) {
+					viewAv = smooth((minX*1.25 + averageX*0.75) / 2, minY, 0);
+					camOffsetX = viewAv[0];
+					camOffsetY = viewAv[1];
+					camScale = (1280 - viewAv[0]) / 1280;
+					//render.bounds.min.x = viewAv[0];
+					//render.bounds.min.y = viewAv[1];
+					//render.bounds.max.y = (1280-viewAv[0])*9/16 + viewAv[1];
 				}
 				window.requestAnimationFrame(draw);
 			}
