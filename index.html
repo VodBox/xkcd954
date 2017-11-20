@@ -5,12 +5,36 @@
 		<script src="pixi.min.js"></script>
 		<link rel='stylesheet' href='https://cdn.jsdelivr.net/npm/hack-font/build/web/hack-subset.css'>
 		<style>
+			#container {
+				position: relative;
+				width: 100%;
+				height: 100%;
+			}
+			canvas {
+				max-width: 100vh;
+				width: 1280px;
+				display: block;
+				position: relative;
+				margin: auto;
+				top: 50%;
+				transform: translateY(-50%);
+				box-shadow: 0 0 15px rgba(0,0,0,1);
+			}
+			canvas:after {
+				padding-top: 56.25%;
+				display: block;
+				content: '';
+			}
 		</style>
 	</head>
 	<body>
+		<div id="container">
+
+		</div>
 		<script>
+			var container = document.getElementById("container");
 			var app = new PIXI.Application(1280, 720, {backgroundColor : 0xFFFFFF});
-			document.body.appendChild(app.view);
+			container.appendChild(app.view);
 			// module aliases
 
 			var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -28,17 +52,22 @@
 				ajaxRequest.send();
 			}
 
-			function playSound(sound, offset, loop, loopOffset, gain) {
+			function playSound(sound, offset, loop, loopOffset, gain, pan) {
+				pan = (pan ? pan : 0);
 				var soundSource = audioCtx.createBufferSource();
 				soundSource.buffer = sound;
 				var gainNode = audioCtx.createGain();
 				soundSource.connect(gainNode);
+				var panNode = new StereoPannerNode(audioCtx, {
+					pan: pan
+				});
+				gainNode.connect(panNode);
 				gainNode.connect(audioCtx.destination);
 				gainNode.gain.value = gain;
 				soundSource.start(0, offset);
 				if(loop) {
 					soundSource.addEventListener("ended", function(e) {
-						playSound(sound, loopOffset, true, loopOffset, gain);
+						playSound(sound, loopOffset, true, loopOffset, gain, pan);
 					});
 				}
 				return soundSource;
@@ -263,7 +292,6 @@
 			var lastChars = "1234567890123456789012345";
 			var lastSpeed = 0;
 			document.addEventListener("keydown", function(e) {
-				console.log(e.key);
 				if(e.key != " " && e.key.length == 1) {
 					lastChars += e.key.toLowerCase();
 					lastChars = lastChars.slice(1);
@@ -336,15 +364,15 @@
 								)
 							);
 							if((maxVelocity > 5 || Math.random() > 0.99) && Math.random() > 0.93) {
-								sound = playSound(impactSounds[Math.floor(Math.random() * impactSounds.length)], 0, false, 0, 0.3);
+								sound = playSound(impactSounds[Math.floor(Math.random() * impactSounds.length)], 0, false, 0, 0.3, Math.random()*2 - 1);
 								sound.playbackRate.value = Math.random()/20 + 0.95;
 							}
 						} else if((e.pairs[i].bodyA.char || e.pairs[i].bodyB.char) && Math.random() > 0.98) {
-							sound = playSound(groundSounds[Math.floor(Math.random() * groundSounds.length)], 0, false, 0, 0.3);
+							sound = playSound(groundSounds[Math.floor(Math.random() * groundSounds.length)], 0, false, 0, 0.3, Math.random()*2 - 1);
 							sound.playbackRate.value = Math.random()/2 + 0.5;
 						} else if((e.pairs[i].bodyA.horse || e.pairs[i].bodyB.horse) && Math.random() > 0.96) {
 							console.log('first');
-							sound = playSound(horseNeigh, 0, false, 0, 0.3);
+							sound = playSound(horseNeigh, 0, false, 0, 0.3, Math.random()*2 - 1);
 							sound.playbackRate.value = Math.random()/2 + 0.5;
 						}
 					}
@@ -452,7 +480,7 @@
 				for(var i = 0, l = people.length; i < l; ++i) {
 					if(people[i].char && mod(people[i].angle, 2*Math.PI) > 0.2 && mod(people[i].angle, 2*Math.PI) < 2*Math.PI - 0.2) {
 						if(!people[i].fallen && Math.random() > 0.8) {
-							sound = playSound(impactSounds[Math.floor(Math.random() * impactSounds.length)], 0, false, 0, 0.3);
+							sound = playSound(impactSounds[Math.floor(Math.random() * impactSounds.length)], 0, false, 0, 0.3, Math.random()*2 - 1);
 							sound.playbackRate.value = Math.random()/20 + 0.95;
 						}
 						people[i].fallen = true;
@@ -461,7 +489,7 @@
 						people[i].graphic.texture = (people[i].fallen ? poses[people[i].char][1] : poses[people[i].char][0]);
 					} else if(people[i].horse && mod(people[i].angle, 2*Math.PI) > 0.2 && mod(people[i].angle, 2*Math.PI) < 2*Math.PI - 0.2) {
 						if(!people[i].fallen) {
-							sound = playSound(horseNeigh, 0, false, 0, 0.3);
+							sound = playSound(horseNeigh, 0, false, 0, 0.3, Math.random()*2 - 1);
 							sound.playbackRate.value = Math.random()/20 + 0.95;
 						}
 						people[i].fallen = true;
