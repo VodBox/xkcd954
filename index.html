@@ -34,6 +34,7 @@
 		<script>
 			var container = document.getElementById("container");
 			var app = new PIXI.Application(1280, 720, {backgroundColor : 0xFFFFFF});
+			app.view.tabIndex = 1;
 			container.appendChild(app.view);
 			// module aliases
 
@@ -274,13 +275,14 @@
 			// var chinUpBar = Bodies.circle(1050, 50, 100, {isStatic: true});
 			// World.add(engine.world, chinUpBar);
 
+
 			var mouseX = -1000;
 			var mouseY = -1000;
 			var clickTime = 1;
 			var backgroundTime = 0;
-			document.addEventListener("mouseup", function(e) {
-				mouseX = e.clientX;
-				mouseY = e.clientY;
+			app.view.addEventListener("mouseup", function(e) {
+				mouseX = e.offsetX;
+				mouseY = e.offsetY;
 				if(!chinUpBar) {
 					chinUpBar = Bodies.circle(1455, -20, 120, {isStatic: true});
 					chinUpBox = Bodies.rectangle(1175, 110, 80, 40, {isStatic: true});
@@ -301,7 +303,7 @@
 
 			var lastChars = "1234567890123456789012345";
 			var lastSpeed = 0;
-			document.addEventListener("keydown", function(e) {
+			parent.document.addEventListener("keydown", function(e) {
 				console.log(e.key);
 				if(e.key != " " && e.key.length == 1) {
 					lastChars += e.key.toLowerCase();
