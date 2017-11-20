@@ -3,6 +3,7 @@
 		<link rel="stylesheet" href="cssReset.css">
 		<script src="matter.min.js"></script>
 		<script src="pixi.min.js"></script>
+		<link rel='stylesheet' href='https://cdn.jsdelivr.net/npm/hack-font/build/web/hack-subset.css'>
 		<style>
 		</style>
 	</head>
@@ -12,6 +13,66 @@
 			document.body.appendChild(app.view);
 			// module aliases
 
+			var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+			function loadSound(url, callback) {
+				let ajaxRequest = new XMLHttpRequest();
+				ajaxRequest.open('GET', url, true);
+				ajaxRequest.responseType = 'arraybuffer';
+				ajaxRequest.onload = function() {
+					let audioData = ajaxRequest.response;
+					audioCtx.decodeAudioData(audioData, function(buffer) {
+							callback(buffer);
+						}, function(e){ console.log("Error with decoding audio data" + e.err);});
+				};
+				ajaxRequest.send();
+			}
+
+			function playSound(sound, offset, loop, loopOffset, gain) {
+				var soundSource = audioCtx.createBufferSource();
+				soundSource.buffer = sound;
+				var gainNode = audioCtx.createGain();
+				soundSource.connect(gainNode);
+				gainNode.connect(audioCtx.destination);
+				gainNode.gain.value = gain;
+				soundSource.start(0, offset);
+				if(loop) {
+					soundSource.addEventListener("ended", function(e) {
+						playSound(sound, loopOffset, true, loopOffset, gain);
+					});
+				}
+				return soundSource;
+			}
+
+			var escalatorSound;
+			loadSound("Escalator.wav", loadEscalator);
+			var horseNeigh;
+			loadSound("Neigh.wav", function(buffer) {
+				horseNeigh = buffer;
+			});
+
+			function loadEscalator(buffer) {
+				escalatorSound = playSound(buffer, 0, false, 0, 0.6 - 0.3*(backgroundTime/70));
+				escalatorSound.addEventListener("ended", function(e) {
+					loadEscalator(buffer);
+				});
+			}
+
+			var impactSounds = [];
+			var groundSounds = [];
+			loadSound("Slap.wav", addImpact);
+			loadSound("Crash.wav", addGround);
+			loadSound("Punch.wav", addImpact);
+			loadSound("Scream1.wav", addImpact);
+			loadSound("Scream2.wav", addImpact);
+
+			function addImpact(buffer) {
+				impactSounds[impactSounds.length] = buffer;
+			}
+			function addGround(buffer) {
+				groundSounds[groundSounds.length] = buffer;
+			}
+
 			var pGraphicContainer = new PIXI.Container();
 			app.stage.addChild(pGraphicContainer);
 
@@ -19,7 +80,8 @@
 				Render = Matter.RenderPixi,
 				World = Matter.World,
 				Bodies = Matter.Bodies,
-				Body = Matter.Body;
+				Body = Matter.Body,
+				Events = Matter.Events;
 
 			// create an engine
 			var engine = Engine.create({
@@ -40,11 +102,23 @@
 				poses[i][3] = PIXI.Texture.fromImage("People/0" + (i+1) + "/FallForward.png");
 			}
 
+			var hatPoses = [];
+			for(let i = 0; i < 8; ++i) {
+				hatPoses[i] = PIXI.Texture.fromImage("PlaceBar/PlaceBar000" + (i+1) + ".png");
+			}
+
+			var barPlacer = new PIXI.Sprite(hatPoses[0]);
+			barPlacer.ox = 1150;
+			barPlacer.oy = 55;
+			barPlacer.owidth = 40;
+			barPlacer.oheight = 62;
+			pGraphicContainer.addChild(barPlacer);
+
 			for(let i = 0; i < escalatorSize; ++i) {
 				escalator[i] = Bodies.rectangle(1100 - (i+1) * 40, 200 + (i+1) * 36, 40, 100, {isStatic: true});
 				escalator[i].slop = 0;
 				//escalator[i].friction = 1;
-				escalator[i].person = (Math.random() > 0.3 ? createPerson((i+1)) : undefined);
+				escalator[i].person = (Math.random() > 0.2 ? createPerson((i+1)) : undefined);
 				if(escalator[i].person) {
 					people[people.length] = escalator[i].person;
 				}
@@ -59,8 +133,30 @@
 				let char = Math.floor(Math.random() * 6);
 				res.graphic = new PIXI.Sprite(poses[char][0]);// + Math.floor(Math.random() * 10) + ".png");
 				res.char = char;
+				res.horse = false;
 				res.graphic.anchor.set(0.5);// + Math.floor(Math.random() * 10) + ".png");
 				res.graphic.width = 36;
+				res.graphic.height = 60;
+				res.graphic.owidth = 36;
+				res.graphic.oheight = 60;
+				pGraphicContainer.addChild(res.graphic);
+				//res.friction = 1;
+				World.add(engine.world, res);
+				return res;
+			}
+
+			function createHorse(num) {
+				let res = Bodies.rectangle(1107 - num * 40, 100 + num * 36, 64, 60);
+				res.height = 100;
+				res.slop = 4;
+				res.density = 0.001;
+				res.restitution = 0.1;//1;
+				res.horse = true;
+				res.graphic = PIXI.Sprite.fromImage("Horse.png");// + Math.floor(Math.random() * 10) + ".png");;
+				res.graphic.anchor.set(0.5);// + Math.floor(Math.random() * 10) + ".png");
+				res.graphic.owidth = 64;
+				res.graphic.oheight = 60;
+				res.graphic.width = 64;
 				res.graphic.height = 60;
 				pGraphicContainer.addChild(res.graphic);
 				//res.friction = 1;
@@ -73,9 +169,25 @@
 			World.add(engine.world, escalator);
 
 			var score = 0;
-			var scoreBarY = Bodies.rectangle(640, 100, 1280, 2, {isStatic: true, isSensor: true});
-			var scoreBarX = Bodies.rectangle(360, 0, 2, 720, {isStatic: true, isSensor: true});
-			World.add(engine.world, [scoreBarX, scoreBarY]);
+			var scoreX = 0;
+			var scoreY = 0;
+			var scoreBarY = new PIXI.Graphics();//Bodies.rectangle(640, 100, 1280, 2, {isStatic: true, isSensor: true});
+			scoreBarY.beginFill(0xFF0000);
+			scoreBarY.drawRect(0, 0, 1280, 2);
+			scoreBarY.endFill();
+			scoreBarY.y = -100;
+			//app.stage.addChild(scoreBarY);
+			var scoreBarX = new PIXI.Graphics();//Bodies.rectangle(640, 100, 1280, 2, {isStatic: true, isSensor: true});
+			scoreBarX.beginFill(0xFF0000);
+			scoreBarX.drawRect(0, 0, 2, 720);
+			scoreBarX.endFill();
+			scoreBarX.x = -100;
+			//app.stage.addChild(scoreBarX);
+			var scoreText = new PIXI.Text("Score: 0",{fontFamily : 'Verdana', fontSize: 24, fill : 0xFFFFFF, align : 'right'});
+			//scoreText.anchor.set(1,0);
+			scoreText.x = 20;
+			scoreText.y = 20;
+			app.stage.addChild(scoreText);
 
 			var escalatorGraphics = [];
 
@@ -126,7 +238,8 @@
 
 			var mouseX = -1000;
 			var mouseY = -1000;
-			var clickTime = 0;
+			var clickTime = 1;
+			var backgroundTime = 0;
 			document.addEventListener("mouseup", function(e) {
 				mouseX = e.clientX;
 				mouseY = e.clientY;
@@ -134,27 +247,50 @@
 					chinUpBar = Bodies.circle(1455, -20, 120, {isStatic: true});
 					chinUpBox = Bodies.rectangle(1175, 110, 80, 40, {isStatic: true});
 					World.add(engine.world, [chinUpBar, chinUpBox]);
-					app.renderer.backgroundColor = 0xAA3333;
+					loadSound("Music.wav", function(buffer) {
+						playSound(buffer, 0, true, 7.16, 0.4);
+					});
 				} else {
+					clickTime = 0;
+				} /**else {
 					Matter.Composite.remove(engine.world, chinUpBar);
 					Matter.Composite.remove(engine.world, chinUpBox);
 					chinUpBar = undefined;
 					app.renderer.backgroundColor = 0xFFFFFF;
-				}
+				}**/
 			});
 
+			var lastChars = "1234567890123456789012345";
 			var lastSpeed = 0;
 			document.addEventListener("keydown", function(e) {
-				if(e.code == "KeyW") {
-					escalatorSpeed += 0.2;
-				} else if(e.code == "KeyS") {
-					escalatorSpeed -= 0.2;
-				} else if(e.code == "Space"){
-					if(escalatorSpeed != 0) {
-						lastSpeed = escalatorSpeed;
-						escalatorSpeed = 0;
-					} else {
-						escalatorSpeed = lastSpeed;
+				console.log(e.key);
+				if(e.key != " " && e.key.length == 1) {
+					lastChars += e.key.toLowerCase();
+					lastChars = lastChars.slice(1);
+					if(lastChars == "correcthorsebatterystaple") {
+						people[people.length] = createHorse(Math.floor(Math.random()*20));
+					}
+				}
+				if(chinUpBar) {
+					if(e.code == "KeyW") {
+						if(escalatorSpeed == 0) {
+							escalatorSpeed = lastSpeed;
+						} else if(escalatorSpeed < 8) {
+							escalatorSpeed += 0.2;
+						}
+					} else if(e.code == "KeyS") {
+						if(escalatorSpeed == 0) {
+							escalatorSpeed = lastSpeed;
+						} else if(escalatorSpeed > -8) {
+							escalatorSpeed -= 0.2;
+						}
+					} else if(e.code == "Space"){
+						if(escalatorSpeed != 0) {
+							lastSpeed = escalatorSpeed;
+							escalatorSpeed = 0;
+						} else {
+							escalatorSpeed = lastSpeed;
+						}
 					}
 				}
 			});
@@ -185,9 +321,42 @@
 				}
 			}
 
+			Events.on(engine, "collisionStart", function(e) {
+				if(chinUpBar) {
+					for(var i = 0, l = e.pairs.length; i < l; ++i) {
+						if(e.pairs[i].bodyA.char && e.pairs[i].bodyB.char) {
+							maxVelocity = Math.max(
+								e.pairs[i].bodyA.velocity.x,
+								Math.max(
+									e.pairs[i].bodyA.velocity.y,
+									Math.max(
+										e.pairs[i].bodyB.velocity.x,
+										e.pairs[i].bodyB.velocity.y
+									)
+								)
+							);
+							if((maxVelocity > 5 || Math.random() > 0.99) && Math.random() > 0.93) {
+								sound = playSound(impactSounds[Math.floor(Math.random() * impactSounds.length)], 0, false, 0, 0.3);
+								sound.playbackRate.value = Math.random()/20 + 0.95;
+							}
+						} else if((e.pairs[i].bodyA.char || e.pairs[i].bodyB.char) && Math.random() > 0.98) {
+							sound = playSound(groundSounds[Math.floor(Math.random() * groundSounds.length)], 0, false, 0, 0.3);
+							sound.playbackRate.value = Math.random()/2 + 0.5;
+						} else if((e.pairs[i].bodyA.horse || e.pairs[i].bodyB.horse) && Math.random() > 0.96) {
+							console.log('first');
+							sound = playSound(horseNeigh, 0, false, 0, 0.3);
+							sound.playbackRate.value = Math.random()/2 + 0.5;
+						}
+					}
+				}
+			});
+
 			function mod(n, m) {
 				return ((n % m) + m) % m;
 			}
+
+			var logo = PIXI.Sprite.fromImage("Logo.png");
+			app.stage.addChild(logo);
 
 			var camScale = 480/1280;
 			var camOffsetX = 800;
@@ -195,22 +364,71 @@
 
 			var escalatorSpeed = 0.5;
 			function draw() {
+				mouseX = (mouseX * camScale) + camOffsetX;
+				mouseY = (mouseY * camScale) + camOffsetY;
+				if(escalatorSound) {
+					escalatorSound.playbackRate.value = Math.abs(escalatorSpeed);
+				}
+				if(barPlacer) {
+					barPlacer.x = (barPlacer.ox - camOffsetX) / camScale;
+					barPlacer.y = (barPlacer.oy - camOffsetY) / camScale;
+					barPlacer.width = barPlacer.owidth / camScale;
+					barPlacer.height = barPlacer.oheight / camScale;
+				}
+				if(chinUpBar && backgroundTime < 71) {
+					let r = Math.floor(255*(1-backgroundTime/70) + 150*(backgroundTime/70));
+					let g = Math.floor(255*(1-backgroundTime/70) + 168*(backgroundTime/70));
+					let b = Math.floor(255*(1-backgroundTime/70) + 200*(backgroundTime/70));
+					app.renderer.backgroundColor = r*256*256 + g*256 + b;
+					logo.alpha = 1-backgroundTime/70;
+					if(backgroundTime > 69) {
+						console.log(barPlacer.x);
+						barPlacer.destroy();
+						barPlacer = undefined;
+					}	else if(backgroundTime > 15) {
+						barPlacer.ox += 2;
+					} else if(backgroundTime > 14) {
+						barPlacer.texture = hatPoses[7];
+					} else if(backgroundTime > 13) {
+						barPlacer.texture = hatPoses[6];
+					} else if(backgroundTime > 12) {
+						barPlacer.texture = hatPoses[5];
+					} else if(backgroundTime > 11) {
+						barPlacer.texture = hatPoses[4];
+					} else if(backgroundTime > 5) {
+						barPlacer.texture = hatPoses[2];
+					} else if(backgroundTime > 3) {
+						barPlacer.texture = hatPoses[3];
+					} else if(backgroundTime > 1) {
+						barPlacer.texture = hatPoses[2];
+					} else if(backgroundTime > 0) {
+						barPlacer.texture = hatPoses[1];
+					} else {
+						barPlacer.texture = hatPoses[0];
+					}
+					++backgroundTime;
+				}
 				Engine.update(engine, 1000/60, 1);
 				//Render.world(render);
 				for(let i = 0; i < escalatorSize; ++i) {
 					if(escalator[i].position.x > 1140) {
 						Body.setPosition(escalator[i], {
-							x: 1140 - escalatorSize * 40,
-							y: 164 + escalatorSize * 36
+							x: escalator[i].position.x - escalatorSize * 40,
+							y: escalator[i].position.y + escalatorSize * 36
 						});
 						if(escalator[i].person && !chinUpBar && !escalator[i].fallen && escalator[i].person.position.x > escalator[i].position.x - 20) {
 							escalator[i].person.isStatic = true;
 						}
-						escalator[i].person = (Math.random() > 0.3 ? createPerson(escalatorSize-1) : undefined);
+						escalator[i].person = (Math.random() > 0.2 ? createPerson(escalatorSize-1) : undefined);
 						if(escalator[i].person) {
 							people[people.length] = escalator[i].person;
 							escalator[i].person.slop = 1;
 						}
+					} else if(escalator[i].position.x < 1140 - escalatorSize * 40) {
+						Body.setPosition(escalator[i], {
+							x: escalator[i].position.x + escalatorSize * 40,
+							y: escalator[i].position.y - escalatorSize * 36
+						});
 					} else {
 						Body.translate(escalator[i], {
 							x: escalatorSpeed,
@@ -232,22 +450,42 @@
 				var minY = 0;
 				var averageX = 0;
 				for(var i = 0, l = people.length; i < l; ++i) {
-					if(mod(people[i].angle, 2*Math.PI) > 0.2 && mod(people[i].angle, 2*Math.PI) < 2*Math.PI - 0.2) {
+					if(people[i].char && mod(people[i].angle, 2*Math.PI) > 0.2 && mod(people[i].angle, 2*Math.PI) < 2*Math.PI - 0.2) {
+						if(!people[i].fallen && Math.random() > 0.8) {
+							sound = playSound(impactSounds[Math.floor(Math.random() * impactSounds.length)], 0, false, 0, 0.3);
+							sound.playbackRate.value = Math.random()/20 + 0.95;
+						}
 						people[i].fallen = true;
 						people[i].graphic.texture = (mod(people[i].angle, 2*Math.PI) < Math.PI ? poses[people[i].char][3] : poses[people[i].char][2]);
-					} else {
+					} else if(people[i].char) {
 						people[i].graphic.texture = (people[i].fallen ? poses[people[i].char][1] : poses[people[i].char][0]);
+					} else if(people[i].horse && mod(people[i].angle, 2*Math.PI) > 0.2 && mod(people[i].angle, 2*Math.PI) < 2*Math.PI - 0.2) {
+						if(!people[i].fallen) {
+							sound = playSound(horseNeigh, 0, false, 0, 0.3);
+							sound.playbackRate.value = Math.random()/20 + 0.95;
+						}
+						people[i].fallen = true;
 					}
 					people[i].graphic.x = (people[i].position.x - camOffsetX) / camScale;
 					people[i].graphic.y = (people[i].position.y - camOffsetY) / camScale;
-					people[i].graphic.width = 36 / camScale;
-					people[i].graphic.height = 60 / camScale;
+					people[i].graphic.width = people[i].graphic.owidth / camScale;
+					people[i].graphic.height = people[i].graphic.oheight / camScale;
 					people[i].graphic.rotation = people[i].angle;
-					if(people[i].isStatic ) {
+					if(people[i].isStatic) {
 						Body.translate(people[i],{
-							x: escalatorSpeed * 20 / 18,
+							x: 2/3 * 20 / 18,
 							y: 0
 						});
+					} else if(clickTime == 0) {
+						if(Math.hypot(mouseX - people[i].position.x, mouseY - people[i].position.y) < 150) {
+							Body.applyForce(people[i], {
+								x: mouseX,
+								y: mouseY
+							}, {
+								x: -Math.max(Math.min(0.1 / (mouseX - people[i].position.x), 0.025), -0.025),
+								y: -Math.max(Math.min(0.1 / (mouseY - people[i].position.y), 0.025), -0.025)
+							});
+						}
 					}
 					if(people[i].position.x > 1300 || people[i].position.y > 1900 || (people[i].position.y > 900 && people[i].position.x > 1020)) {
 						people[i].graphic.destroy();
@@ -257,22 +495,19 @@
 						--l;
 					} else {
 						minY = Math.min(minY, people[i].position.y-20);
-						minX = Math.max(Math.min(minX + minY, people[i].position.x), 1040 - escalatorSize * 40);
+						minX = Math.max(Math.min(minX, people[i].position.x + minY), 1040 - escalatorSize * 40);
 						averageX += people[i].position.x / l;
 						var pos = -(people[i].position.x - 1000) / 40;
 						if((200 + pos * 36) - people[i].position.y > score) {
 							score = (200 + (pos) * 36) - people[i].position.y;
-							Body.setPosition(scoreBarY, {
-								x: 640,
-								y: people[i].position.y
-							});
-							Body.setPosition(scoreBarX, {
-								x: people[i].position.x,
-								y: 360
-							});
+							scoreX = people[i].position.x;
+							scoreY = people[i].position.y;
 						}
 					}
 				}
+				scoreBarX.x = (scoreX - camOffsetX) / camScale;
+				scoreBarY.y = (scoreY - camOffsetY) / camScale;
+				scoreText.text = "Score: " + Math.floor(score);
 				var viewAv;
 				if(chinUpBar) {
 					viewAv = smooth((minX*1.25 + averageX*0.75) / 2, minY, 0);
@@ -285,6 +520,7 @@
 				camOffsetX = viewAv[0];
 				camOffsetY = viewAv[1];
 				camScale = (1280 - viewAv[0]) / 1280;
+				++clickTime;
 				window.requestAnimationFrame(draw);
 			}
 			window.requestAnimationFrame(draw);
