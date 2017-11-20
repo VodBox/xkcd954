@@ -39,6 +39,8 @@
 
 			var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
+			var music;
+
 			function loadSound(url, callback) {
 				let ajaxRequest = new XMLHttpRequest();
 				ajaxRequest.open('GET', url, true);
@@ -72,6 +74,9 @@
 				}
 				return soundSource;
 			}
+			loadSound("Music.wav", function(buffer) {
+				music = buffer;
+			});
 
 			var escalatorSound;
 			loadSound("Escalator.wav", loadEscalator);
@@ -276,9 +281,7 @@
 					chinUpBar = Bodies.circle(1455, -20, 120, {isStatic: true});
 					chinUpBox = Bodies.rectangle(1175, 110, 80, 40, {isStatic: true});
 					World.add(engine.world, [chinUpBar, chinUpBox]);
-					loadSound("Music.wav", function(buffer) {
-						playSound(buffer, 0, true, 7.16, 0.4);
-					});
+					playSound(music, 0, true, 7.16, 0.4);
 				} else {
 					clickTime = 0;
 				} /**else {
