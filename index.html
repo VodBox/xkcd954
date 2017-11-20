@@ -40,6 +40,9 @@
 			var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
 			var music;
+			var musicSound;
+
+			var volume = 0.5;
 
 			function loadSound(url, callback) {
 				let ajaxRequest = new XMLHttpRequest();
@@ -65,13 +68,14 @@
 				});
 				gainNode.connect(panNode);
 				gainNode.connect(audioCtx.destination);
-				gainNode.gain.value = gain;
+				gainNode.gain.value = gain*volume;
 				soundSource.start(0, offset);
 				if(loop) {
 					soundSource.addEventListener("ended", function(e) {
 						playSound(sound, loopOffset, true, loopOffset, gain, pan);
 					});
 				}
+				soundSource.theGain = gainNode;
 				return soundSource;
 			}
 			loadSound("Music.wav", function(buffer) {
@@ -281,7 +285,10 @@
 					chinUpBar = Bodies.circle(1455, -20, 120, {isStatic: true});
 					chinUpBox = Bodies.rectangle(1175, 110, 80, 40, {isStatic: true});
 					World.add(engine.world, [chinUpBar, chinUpBox]);
-					playSound(music, 0, true, 7.16, 0.4);
+					musicSound = playSound(music, 0, false, 7.16, 0.4);
+					musicSound.addEventListener("ended", function(e) {
+						musicSound = playSound(music, 7.16, false, 7.16, 0.4);
+					});
 				} else {
 					clickTime = 0;
 				} /**else {
@@ -295,6 +302,7 @@
 			var lastChars = "1234567890123456789012345";
 			var lastSpeed = 0;
 			document.addEventListener("keydown", function(e) {
+				console.log(e.key);
 				if(e.key != " " && e.key.length == 1) {
 					lastChars += e.key.toLowerCase();
 					lastChars = lastChars.slice(1);
@@ -322,6 +330,15 @@
 						} else {
 							escalatorSpeed = lastSpeed;
 						}
+					}
+					if(e.key == "+") {
+						volume = Math.min(volume + 0.1, 1);
+						escalatorSound.theGain.gain.value = volume * 0.3;
+						musicSound.theGain.gain.value = volume * 0.4;
+					} else if(e.key == "-") {
+						volume = Math.max(volume - 0.1, 0);
+						escalatorSound.theGain.gain.value = volume * 0.3;
+						musicSound.theGain.gain.value = volume * 0.4;
 					}
 				}
 			});
