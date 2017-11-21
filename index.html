@@ -27,7 +27,7 @@
 			}
 		</style>
 	</head>
-	<body>
+	<body onkeydown="preventUseOfDefaultKeys(event);">
 		<div id="container">
 
 		</div>
@@ -281,15 +281,22 @@
 			var clickTime = 1;
 			var backgroundTime = 0;
 			app.view.addEventListener("mouseup", function(e) {
+				window.focus();
 				mouseX = e.offsetX;
 				mouseY = e.offsetY;
 				if(!chinUpBar) {
 					chinUpBar = Bodies.circle(1455, -20, 120, {isStatic: true});
 					chinUpBox = Bodies.rectangle(1175, 110, 80, 40, {isStatic: true});
 					World.add(engine.world, [chinUpBar, chinUpBox]);
+					var musicLoop = function() {
+						musicSound = playSound(music, 7.16, false, 7.16, 0.4);
+						musicSound.addEventListener("ended", function(e) {
+							musicLoop();
+						});
+					}
 					musicSound = playSound(music, 0, false, 7.16, 0.4);
 					musicSound.addEventListener("ended", function(e) {
-						musicSound = playSound(music, 7.16, false, 7.16, 0.4);
+						musicLoop();
 					});
 				} else {
 					clickTime = 0;
@@ -300,10 +307,16 @@
 					app.renderer.backgroundColor = 0xFFFFFF;
 				}**/
 			});
+			function preventUseOfDefaultKeys(event) {
+				if (event.keyCode == 32 || event.keyCode == 27) {
+						event.preventDefault();
+				}
+			}
 
 			var lastChars = "1234567890123456789012345";
 			var lastSpeed = 0;
-			parent.document.addEventListener("keydown", function(e) {
+			document.tabIndex = 1;
+			document.addEventListener("keydown", function(e) {
 				console.log(e.key);
 				if(e.key != " " && e.key.length == 1) {
 					lastChars += e.key.toLowerCase();
